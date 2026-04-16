@@ -29,28 +29,28 @@ def get_model(model_name):
         return CNNPlanner()
 
 
-def train():
-    args = get_args()
-
+def train(
+    model_name="mlp_planner",
+    transform_pipeline="state_only",
+    num_workers=4,
+    lr=1e-3,
+    batch_size=128,
+    num_epoch=20,
+):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Dataset
     train_dataset = RoadDataset(split="train")
     val_dataset = RoadDataset(split="val")
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
-    # Model
-    model = get_model(args.model).to(device)
+    model = get_model(model_name).to(device)
 
-    # Loss (IMPORTANT: regression task)
     criterion = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-    # Optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-
-    for epoch in range(args.epochs):
+    for epoch in range(num_epoch):
         model.train()
         total_loss = 0
 
@@ -61,7 +61,7 @@ def train():
             track_right = batch["track_right"].to(device)
             waypoints = batch["waypoints"].to(device)
 
-            if args.model == "cnn":
+            if model_name == "cnn_planner":
                 images = batch["image"].to(device)
                 preds = model(images)
             else:
@@ -75,33 +75,7 @@ def train():
 
         print(f"Epoch {epoch}: Train Loss = {total_loss / len(train_loader):.4f}")
 
-        # Validation
-        model.eval()
-        long_err, lat_err = 0, 0
-
-        with torch.no_grad():
-            for batch in val_loader:
-                track_left = batch["track_left"].to(device)
-                track_right = batch["track_right"].to(device)
-                waypoints = batch["waypoints"].to(device)
-
-                if args.model == "cnn":
-                    images = batch["image"].to(device)
-                    preds = model(images)
-                else:
-                    preds = model(track_left, track_right)
-
-                long_err += compute_longitudinal_error(preds, waypoints)
-                lat_err += compute_lateral_error(preds, waypoints)
-
-        long_err /= len(val_loader)
-        lat_err /= len(val_loader)
-
-        print(f"Val Longitudinal Error: {long_err:.4f}")
-        print(f"Val Lateral Error: {lat_err:.4f}")
-
-    # Save model
-    save_model(model, f"{args.model}_planner.pt")
+    save_model(model)
 
 
 if __name__ == "__main__":
