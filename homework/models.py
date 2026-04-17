@@ -70,26 +70,16 @@ class TransformerPlanner(nn.Module):
     def forward(self, track_left, track_right, **kwargs):
         b = track_left.shape[0]
 
-        # (B, 20, 2)
-        x = torch.cat([track_left, track_right], dim=1)
+        center = (track_left + track_right) / 2.0
+        width = track_right - track_left
 
-        # IMPORTANT: normalize BEFORE encoding
+        x = torch.cat([center, width], dim=1)
         x = x - x.mean(dim=1, keepdim=True)
 
-        # encode
         memory = self.input_proj(x)
 
-        # positional encoding
-        pos = torch.linspace(
-            0, 1, self.n_track,
-            device=track_left.device
-        ).unsqueeze(-1)  # (20, 1)
+        memory = memory + self.pos_embed  # learned positional encoding
 
-        pos = pos.repeat(1, self.d_model).unsqueeze(0)  # (1, 20, d_model)
-
-        memory = memory + pos
-
-        # queries
         query = self.query_embed.weight.unsqueeze(0).repeat(b, 1, 1)
 
         out = self.decoder(query, memory)
