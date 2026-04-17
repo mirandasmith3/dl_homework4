@@ -1,10 +1,10 @@
 import torch
 from torch.utils.data import DataLoader
+from pathlib import Path
 
-from homework.models import MLPPlanner, TransformerPlanner, CNNPlanner
+from homework.models import MLPPlanner, TransformerPlanner, CNNPlanner, save_model
 from homework.datasets.road_dataset import RoadDataset
 from homework.metrics import PlannerMetric
-from homework.models import save_model
 
 
 def get_model(model_name):
@@ -20,7 +20,7 @@ def get_model(model_name):
 
 def train(
     model_name="mlp_planner",
-    transform_pipeline="state_only",  # not used but kept for compatibility
+    transform_pipeline="state_only",
     num_workers=4,
     lr=1e-3,
     batch_size=128,
@@ -28,27 +28,37 @@ def train(
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Datasets
-    train_dataset = RoadDataset(transform_pipeline=transform_pipeline, train=True)
-    val_dataset = RoadDataset(transform_pipeline=transform_pipeline, train=False)
+    # ===== DATASETS =====
+    data_root = Path("drive_data")
+
+    train_dataset = RoadDataset(
+        str(data_root / "train"),
+        transform_pipeline=transform_pipeline,
+    )
+
+    val_dataset = RoadDataset(
+        str(data_root / "val"),
+        transform_pipeline=transform_pipeline,
+    )
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
+        pin_memory=True,
     )
+
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         num_workers=num_workers,
+        pin_memory=True,
     )
 
-    # Model
+    # ===== MODEL =====
     model = get_model(model_name).to(device)
 
-    # Loss + optimizer
-    criterion = torch.nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     for epoch in range(num_epoch):
@@ -62,6 +72,7 @@ def train(
             track_left = batch["track_left"].to(device)
             track_right = batch["track_right"].to(device)
             waypoints = batch["waypoints"].to(device)
+            waypoints_mask = batch["waypoints_mask"].to(device)
 
             if model_name == "cnn_planner":
                 images = batch["image"].to(device)
@@ -69,7 +80,10 @@ def train(
             else:
                 preds = model(track_left, track_right)
 
-            loss = criterion(preds, waypoints)
+            # ===== MASKED MSE LOSS =====
+            mask = waypoints_mask[..., None]  # (B, n, 1)
+            loss = ((preds - waypoints) ** 2 * mask).sum() / mask.sum()
+
             loss.backward()
             optimizer.step()
 
@@ -103,7 +117,7 @@ def train(
         print(f"Val Longitudinal Error: {results['longitudinal_error']:.4f}")
         print(f"Val Lateral Error: {results['lateral_error']:.4f}")
 
-    # Save model (grader expects this)
+    # ===== SAVE MODEL =====
     save_model(model)
 
 
