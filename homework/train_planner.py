@@ -46,9 +46,9 @@ def train(
     model_name="transformer_planner",
     transform_pipeline="state_only",
     num_workers=2,
-    lr=5e-4,       # lower than 1e-3
+    lr=3e-4,
     batch_size=128,
-    num_epoch=100, # more epochs with cosine decay
+    num_epoch=100,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -104,6 +104,7 @@ def train(
             loss = ((preds - waypoints) ** 2 * mask).sum() / mask.sum()
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             total_loss += loss.item()
