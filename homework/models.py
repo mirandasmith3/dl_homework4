@@ -29,11 +29,11 @@ class MLPPlanner(nn.Module):
     def forward(self, track_left, track_right, **kwargs):
         b = track_left.shape[0]
 
-        # concatenate left + right
-        x = torch.cat([track_left, track_right], dim=1)  # (B, 20, 2)
+        center = (track_left + track_right) / 2.0
+        width = track_right - track_left
 
-        # flatten
-        x = x.view(b, -1)  # (B, 40)
+        x = torch.cat([center, width], dim=-1)
+        x = x.view(b, -1)
 
         out = self.model(x)  # (B, n_waypoints*2)
 
