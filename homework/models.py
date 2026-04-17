@@ -73,14 +73,17 @@ class TransformerPlanner(nn.Module):
         # (B, 20, 2)
         x = torch.cat([track_left, track_right], dim=1)
 
+        # IMPORTANT: normalize BEFORE encoding
+        x = x - x.mean(dim=1, keepdim=True)
+
         # encode
         memory = self.input_proj(x)
 
-        # stronger positional encoding (IMPORTANT FIX)
+        # positional encoding
         pos = torch.linspace(
             0, 1, self.n_track,
             device=track_left.device
-        ).unsqueeze(-1)              # (20, 1)
+        ).unsqueeze(-1)  # (20, 1)
 
         pos = pos.repeat(1, self.d_model).unsqueeze(0)  # (1, 20, d_model)
 
