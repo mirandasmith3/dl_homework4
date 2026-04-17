@@ -84,6 +84,7 @@ class TransformerPlanner(nn.Module):
         # Pair each left point with its corresponding right point
         # shape: (B, n_track, 4)
         x = torch.cat([track_left, track_right], dim=-1)
+        print(f"x shape: {x.shape}")
 
         memory = self.input_proj(x)   # (B, n_track, d_model)
 
