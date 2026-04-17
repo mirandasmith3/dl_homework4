@@ -28,17 +28,11 @@ def get_model(model_name):
 
 
 def build_dataset(root, transform_pipeline):
-    """
-    Each episode folder is a separate dataset item.
-    We wrap them with ConcatDataset.
-    """
     episode_paths = sorted([p for p in Path(root).iterdir() if p.is_dir()])
-
     datasets = [
         RoadDataset(str(ep), transform_pipeline=transform_pipeline)
         for ep in episode_paths
     ]
-
     return ConcatDataset(datasets)
 
 
@@ -77,8 +71,10 @@ def train(
     # ===== MODEL =====
     model = get_model(model_name).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoch)
+
+    best_lateral = float('inf')
 
     # ===== TRAIN LOOP =====
     for epoch in range(num_epoch):
@@ -99,7 +95,6 @@ def train(
             else:
                 preds = model(track_left, track_right)
 
-            # masked MSE loss
             mask = waypoints_mask[..., None]
             loss = ((preds - waypoints) ** 2 * mask).sum() / mask.sum()
 
@@ -135,11 +130,14 @@ def train(
 
         print(f"Val Longitudinal Error: {results['longitudinal_error']:.4f}")
         print(f"Val Lateral Error: {results['lateral_error']:.4f}")
+
+        # ===== SAVE BEST =====
+        if results['lateral_error'] < best_lateral:
+            best_lateral = results['lateral_error']
+            save_model(model)
+            print(f"  --> New best saved: {best_lateral:.4f}")
+
         scheduler.step()
-
-
-    # ===== SAVE =====
-    save_model(model)
 
 
 if __name__ == "__main__":
