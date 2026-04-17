@@ -124,6 +124,24 @@ class CNNPlanner(nn.Module):
         x = self.fc(x)
 
         return x.view(b, self.n_waypoints, 2)
+    
+
+    class LinearPlanner(nn.Module):
+        def __init__(self, n_track=10, n_waypoints=3):
+            super().__init__()
+
+            self.n_track = n_track
+            self.n_waypoints = n_waypoints
+
+            self.fc = nn.Linear(n_track * 4, n_waypoints * 2)  
+            # 4 = (left x,y + right x,y)
+
+        def forward(self, track_left, track_right):
+            x = torch.cat([track_left, track_right], dim=-1)  # (B, 10, 4)
+            x = x.reshape(x.shape[0], -1)  # (B, 40)
+
+            x = self.fc(x)  # (B, 6)
+            return x.view(-1, self.n_waypoints, 2)
 
 
 MODEL_FACTORY = {

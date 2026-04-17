@@ -2,7 +2,14 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset
 from pathlib import Path
 
-from homework.models import MLPPlanner, TransformerPlanner, CNNPlanner, save_model
+from homework.models import (
+    MLPPlanner,
+    TransformerPlanner,
+    CNNPlanner,
+    LinearPlanner,
+    save_model,
+)
+
 from homework.datasets.road_dataset import RoadDataset
 from homework.metrics import PlannerMetric
 
@@ -14,6 +21,8 @@ def get_model(model_name):
         return TransformerPlanner()
     elif model_name == "cnn_planner":
         return CNNPlanner()
+    elif model_name == "linear_planner":
+        return LinearPlanner()
     else:
         raise ValueError(f"Unknown model: {model_name}")
 
