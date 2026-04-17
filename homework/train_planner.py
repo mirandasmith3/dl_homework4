@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from pathlib import Path
 
 from homework.models import MLPPlanner, TransformerPlanner, CNNPlanner, save_model
@@ -18,6 +18,21 @@ def get_model(model_name):
         raise ValueError(f"Unknown model: {model_name}")
 
 
+def build_dataset(root, transform_pipeline):
+    """
+    Each episode folder is a separate dataset item.
+    We wrap them with ConcatDataset.
+    """
+    episode_paths = sorted([p for p in Path(root).iterdir() if p.is_dir()])
+
+    datasets = [
+        RoadDataset(str(ep), transform_pipeline=transform_pipeline)
+        for ep in episode_paths
+    ]
+
+    return ConcatDataset(datasets)
+
+
 def train(
     model_name="mlp_planner",
     transform_pipeline="state_only",
@@ -28,18 +43,11 @@ def train(
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # ===== DATASETS =====
+    # ===== DATA =====
     data_root = Path("drive_data")
 
-    train_dataset = RoadDataset(
-        str(data_root / "train"),
-        transform_pipeline=transform_pipeline,
-    )
-
-    val_dataset = RoadDataset(
-        str(data_root / "val"),
-        transform_pipeline=transform_pipeline,
-    )
+    train_dataset = build_dataset(data_root / "train", transform_pipeline)
+    val_dataset = build_dataset(data_root / "val", transform_pipeline)
 
     train_loader = DataLoader(
         train_dataset,
@@ -52,6 +60,7 @@ def train(
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
+        shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
     )
@@ -61,10 +70,10 @@ def train(
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+    # ===== TRAIN LOOP =====
     for epoch in range(num_epoch):
-        # ===== TRAIN =====
         model.train()
-        total_loss = 0
+        total_loss = 0.0
 
         for batch in train_loader:
             optimizer.zero_grad()
@@ -80,8 +89,8 @@ def train(
             else:
                 preds = model(track_left, track_right)
 
-            # ===== MASKED MSE LOSS =====
-            mask = waypoints_mask[..., None]  # (B, n, 1)
+            # masked MSE loss
+            mask = waypoints_mask[..., None]
             loss = ((preds - waypoints) ** 2 * mask).sum() / mask.sum()
 
             loss.backward()
@@ -89,8 +98,7 @@ def train(
 
             total_loss += loss.item()
 
-        avg_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch}: Train Loss = {avg_loss:.4f}")
+        print(f"Epoch {epoch}: Train Loss = {total_loss / len(train_loader):.4f}")
 
         # ===== VALIDATION =====
         model.eval()
@@ -117,7 +125,7 @@ def train(
         print(f"Val Longitudinal Error: {results['longitudinal_error']:.4f}")
         print(f"Val Lateral Error: {results['lateral_error']:.4f}")
 
-    # ===== SAVE MODEL =====
+    # ===== SAVE =====
     save_model(model)
 
 
