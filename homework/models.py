@@ -47,51 +47,52 @@ class MLPPlanner(nn.Module):
 # TRANSFORMER PLANNER
 # =========================
 class TransformerPlanner(nn.Module):
-    def __init__(self, n_track=10, n_waypoints=3, d_model=128):
+    def __init__(self, n_track=10, n_waypoints=3, d_model=64):
         super().__init__()
 
         self.n_track = n_track
         self.n_waypoints = n_waypoints
-        self.d_model = d_model
 
-        # Encode left and right separately with positional context
+        # Compute lane center and width explicitly
         self.input_proj = nn.Sequential(
-            nn.Linear(4, d_model),   # left_xy + right_xy concatenated per row
+            nn.Linear(4, d_model),
             nn.ReLU(),
             nn.Linear(d_model, d_model),
         )
+
+        # Learnable positional encoding per track point
+        self.pos_embed = nn.Embedding(n_track, d_model)
 
         self.query_embed = nn.Embedding(n_waypoints, d_model)
 
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=d_model,
             nhead=4,
-            dim_feedforward=256,
-            dropout=0.1,
+            dim_feedforward=128,
+            dropout=0.0,
             batch_first=True,
+            norm_first=True,  # pre-norm is more stable
         )
-        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=4)
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=2)
 
-        self.output_proj = nn.Sequential(
-            nn.Linear(d_model, 64),
-            nn.ReLU(),
-            nn.Linear(64, 2),
-        )
+        self.output_proj = nn.Linear(d_model, 2)
 
     def forward(self, track_left, track_right, **kwargs):
         b = track_left.shape[0]
 
-        # Pair each left point with its corresponding right point
-        # shape: (B, n_track, 4)
-        x = torch.cat([track_left, track_right], dim=-1)
+        # Explicitly give model center and width as features
+        center = (track_left + track_right) / 2.0  # (B, n_track, 2)
+        width = (track_right - track_left)          # (B, n_track, 2)
+        x = torch.cat([center, width], dim=-1)      # (B, n_track, 4)
 
-        memory = self.input_proj(x)   # (B, n_track, d_model)
+        pos = self.pos_embed.weight.unsqueeze(0).expand(b, -1, -1)
+        memory = self.input_proj(x) + pos
 
-        query = self.query_embed.weight.unsqueeze(0).expand(b, -1, -1)  # (B, n_waypoints, d_model)
+        query = self.query_embed.weight.unsqueeze(0).expand(b, -1, -1)
 
-        out = self.decoder(query, memory)   # (B, n_waypoints, d_model)
-        return self.output_proj(out)        # (B, n_waypoints, 2)
-
+        out = self.decoder(query, memory)
+        return self.output_proj(out)
+    
 
 # =========================
 # CNN PLANNER
