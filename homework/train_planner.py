@@ -29,8 +29,8 @@ def train(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Datasets
-    train_dataset = RoadDataset(split="train")
-    val_dataset = RoadDataset(split="val")
+    train_dataset = RoadDataset(transform_pipeline=transform_pipeline, train=True)
+    val_dataset = RoadDataset(transform_pipeline=transform_pipeline, train=False)
 
     train_loader = DataLoader(
         train_dataset,
