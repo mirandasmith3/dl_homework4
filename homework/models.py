@@ -58,6 +58,8 @@ class TransformerPlanner(nn.Module):
 
         self.query_embed = nn.Embedding(n_waypoints, d_model)
 
+        self.pos_embed = nn.Parameter(torch.randn(1, n_track * 2, d_model))
+
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=d_model,
             nhead=4,
@@ -70,15 +72,11 @@ class TransformerPlanner(nn.Module):
     def forward(self, track_left, track_right, **kwargs):
         b = track_left.shape[0]
 
-        center = (track_left + track_right) / 2.0
-        width = track_right - track_left
-
-        x = torch.cat([center, width], dim=1)
+        x = torch.cat([track_left, track_right], dim=1)
         x = x - x.mean(dim=1, keepdim=True)
 
         memory = self.input_proj(x)
-
-        memory = memory + self.pos_embed  # learned positional encoding
+        memory = memory + self.pos_embed
 
         query = self.query_embed.weight.unsqueeze(0).repeat(b, 1, 1)
 
