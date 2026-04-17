@@ -43,12 +43,12 @@ def build_dataset(root, transform_pipeline):
 
 
 def train(
-    model_name="mlp_planner",
+    model_name="transformer_planner",
     transform_pipeline="state_only",
-    num_workers=4,
+    num_workers=2,
     lr=1e-3,
     batch_size=128,
-    num_epoch=20,
+    num_epoch=60,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
