@@ -54,36 +54,43 @@ class TransformerPlanner(nn.Module):
         self.n_waypoints = n_waypoints
         self.d_model = d_model
 
-        self.input_proj = nn.Linear(2, d_model)
+        # Encode left and right separately with positional context
+        self.input_proj = nn.Sequential(
+            nn.Linear(4, d_model),   # left_xy + right_xy concatenated per row
+            nn.ReLU(),
+            nn.Linear(d_model, d_model),
+        )
 
         self.query_embed = nn.Embedding(n_waypoints, d_model)
-
-        self.pos_embed = nn.Parameter(torch.randn(1, n_track * 2, d_model))
 
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=d_model,
             nhead=4,
-            batch_first=True
+            dim_feedforward=256,
+            dropout=0.1,
+            batch_first=True,
         )
-        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=3)
+        self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=4)
 
-        self.output_proj = nn.Linear(d_model, 2)
+        self.output_proj = nn.Sequential(
+            nn.Linear(d_model, 64),
+            nn.ReLU(),
+            nn.Linear(64, 2),
+        )
 
     def forward(self, track_left, track_right, **kwargs):
         b = track_left.shape[0]
 
-        x = torch.cat([track_left, track_right], dim=1)
-        x = x - x.mean(dim=1, keepdim=True)
+        # Pair each left point with its corresponding right point
+        # shape: (B, n_track, 4)
+        x = torch.cat([track_left, track_right], dim=-1)
 
-        memory = self.input_proj(x)
-        memory = memory + self.pos_embed
+        memory = self.input_proj(x)   # (B, n_track, d_model)
 
-        query = self.query_embed.weight.unsqueeze(0).repeat(b, 1, 1)
+        query = self.query_embed.weight.unsqueeze(0).expand(b, -1, -1)  # (B, n_waypoints, d_model)
 
-        out = self.decoder(query, memory)
-        out = self.output_proj(out)
-
-        return out
+        out = self.decoder(query, memory)   # (B, n_waypoints, d_model)
+        return self.output_proj(out)        # (B, n_waypoints, 2)
 
 
 # =========================

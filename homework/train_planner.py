@@ -46,9 +46,9 @@ def train(
     model_name="transformer_planner",
     transform_pipeline="state_only",
     num_workers=2,
-    lr=1e-3,
+    lr=5e-4,       # lower than 1e-3
     batch_size=128,
-    num_epoch=60,
+    num_epoch=100, # more epochs with cosine decay
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -78,6 +78,7 @@ def train(
     model = get_model(model_name).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epoch)
 
     # ===== TRAIN LOOP =====
     for epoch in range(num_epoch):
@@ -133,6 +134,8 @@ def train(
 
         print(f"Val Longitudinal Error: {results['longitudinal_error']:.4f}")
         print(f"Val Lateral Error: {results['lateral_error']:.4f}")
+        scheduler.step()
+
 
     # ===== SAVE =====
     save_model(model)
